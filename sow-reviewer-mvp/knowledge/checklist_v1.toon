@@ -1,0 +1,14 @@
+mandatory_sections[7]{id,section,severity,requirement}:
+  SEC-01,Project Scope & Objectives,HIGH,Must explicitly define both In-Scope and Out-of-Scope boundaries
+  SEC-02,Deliverables Schedule,HIGH,Must include structured table with ID, Deliverable, Format, Target Date, and Owner
+  SEC-03,Acceptance Criteria & Sign-Off,CRITICAL,Must define measurable done metrics per deliverable and a review window (e.g. 5 business days with deemed acceptance)
+  SEC-04,Roles & Responsibilities (RACI),CRITICAL,Must allocate Vendor vs Client responsibilities and name key leads
+  SEC-05,Commercials & Payment Milestones,CRITICAL,Must state TCV, milestone billing triggers, and Net payment terms
+  SEC-06,Assumptions & Dependencies,MEDIUM,Must list client environment/data access dependencies and timeline shift clauses
+  SEC-07,Change Control Process,HIGH,Must require formal written Change Requests (CR) for scope, schedule, or cost changes
+
+risk_triggers[4]{id,pattern,severity,risk_explanation}:
+  RSK-01,full satisfaction / as required by client,CRITICAL,Subjective acceptance or uncapped scope creates unbilled work risk
+  RSK-02,unlimited revisions / ongoing maintenance included,CRITICAL,Uncapped post-launch effort on a fixed-fee contract
+  RSK-03,best efforts,HIGH,Ambiguous delivery obligation incompatible with fixed-fee milestones
+  RSK-04,TBD / to be finalized at kickoff,MEDIUM,Unanchored delivery dates prevent schedule accountability

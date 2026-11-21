@@ -1,0 +1,9 @@
+streamlit
+docling
+pydantic>=2
+requests
+pandas
+openpyxl
+python-docx
+reportlab
+pypdf
