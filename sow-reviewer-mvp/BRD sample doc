@@ -1,0 +1,169 @@
+use python, ollama
+Here is a complete, developer-ready Business Requirements Document (BRD) tailored specifically for your SOW Reviewer MVP. It incorporates your exact architecture diagram, the hybrid TOON input / strict JSON output optimization, deterministic quote verification, and the dry-run test suite.
+
+You can copy and paste this directly into Claude (or Claude Code) to generate the entire codebase and execute your dry run.
+
+Business Requirements Document (BRD): Enterprise SOW Reviewer MVP
+1. Executive Summary & Problem Statement
+Manual review of Statements of Work (SOWs) by Delivery Leads and Commercial teams is slow, inconsistent, and prone to human oversight. Missing sections—such as undefined Acceptance Criteria, omitted Roles & Responsibilities (RACI), or open-ended commitments like "unlimited revisions"—lead to severe scope creep, unbilled effort, and delivery disputes.
+
+Objective: Build an automated SOW Reviewer MVP that ingests draft SOW documents (.pdf, .docx, .md), audits them against versioned company governance policies, flags missing sections and vague/risky clauses with verbatim evidence, computes a deterministic compliance score, and exports an actionable review report.
+
+2. Scope & Phasing
+In-Scope (MVP):
+
+Single-document SOW upload via a lightweight Streamlit UI.
+
+Multi-format document parsing (.pdf, .docx, .md) using Docling.
+
+Offline knowledge preparation converting company policy and gold-standard SOW rules into token-efficient TOON (Token-Oriented Object Notation) files.
+
+Three specialized LLM audit agents (Completeness, Risk + Vagueness, Summary) enforcing strict JSON Schema outputs.
+
+Deterministic Python Quote Verifier and Score Engine (no LLM-based math).
+
+Report generation (UI dashboard + downloadable Excel .xlsx and Markdown .md reports) and local SQLite History DB logging.
+
+Out-of-Scope (Deferred to Phase 2):
+
+Live incremental folder indexing via CocoIndex and vector database storage (pgvector).
+
+Parent Master Services Agreement (MSA) cross-referencing.
+
+Asynchronous worker queues (Celery/FastAPI) and SSO/RBAC authentication.
+
+3. System Architecture & Data Flow
+Part A: Knowledge Preparation (Offline / One-Time Setup)
+Source Docs: Ingest company_sow_policy.md and correct_sow_sample.md (alongside .pdf/.docx equivalents).
+
+Docling Parse: Extract normalized Markdown text and structured tables.
+
+Checklist Compilation (knowledge/checklist_v1.toon): Store mandatory rules, severity weights, and prohibited ambiguous phrases in TOON format ([N]{fields}: tabular blocks) to reduce prompt input tokens by ~40% compared to JSON.
+
+Part B: SOW Review Pipeline (Runtime Execution)
+Streamlit UI: User uploads a draft SOW (.pdf, .docx, or .md) and clicks Run SOW Review.
+
+Docling Parse & Sectioning: Convert uploaded file to clean Markdown preserving pipe tables (| col | col |). Split into sections by # / ## headings (with a full-document fallback flag if fewer than 3 headings are detected).
+
+Parallel / Sequential LLM Agents (Input: TOON Rules + Parsed SOW | Output: Strict JSON):
+
+Agent 1 — Completeness Agent: Checks SOW against mandatory policy sections (Scope, Deliverables Table, Acceptance Criteria & Sign-off Window, RACI, Payment Milestones, Assumptions, Change Control). Outputs missing or incomplete sections.
+
+Agent 2 — Risk + Vagueness Agent: Scans SOW text for prohibited open-ended phrases (e.g., "to client's full satisfaction", "unlimited revisions", "best efforts", "TBD" milestones) and pulls exact verbatim quotes.
+
+Agent 3 — Summary Agent: Deduplicates and merges findings from Agents 1 and 2 into a unified executive summary and prioritized remediation list.
+
+Deterministic Guardrails & Score Engine (Pure Python — No LLM):
+
+Quote Verifier: Checks every LLM-extracted quote against the Docling Markdown output (exact/normalized substring match). Flags unverified quotes so hallucinated citations never reach the final report.
+
+Score Engine: Starts at 100 points and deducts deterministic penalties based on verified findings:
+
+CRITICAL: -20 pts per finding (e.g., missing Acceptance Criteria, missing RACI, missing Payment Terms, uncapped revisions).
+
+HIGH: -10 pts per finding (e.g., missing Out-of-Scope, missing Change Control, vague ongoing maintenance).
+
+MEDIUM: -5 pts per finding (e.g., missing Client Assumptions, TBD dates).
+
+Status Thresholds: >= 85 (Approved / Low Risk), 65–84 (Conditional / Needs Revision), < 65 (Rejected / High Risk).
+
+Output & Persistence:
+
+Display score, risk badge, executive summary, and finding table (Section, Severity, Issue, Verbatim Quote, Recommended Fix) in Streamlit.
+
+Provide 1-click download for Excel (.xlsx) and Markdown (.md).
+
+Persist run metadata, score, and JSON payload into SQLite (history.db).
+
+4. Functional Requirements & Data Contracts
+4.1 Knowledge Format (knowledge/checklist_v1.toon)
+YAML
+mandatory_sections[7]{id,section,severity,requirement}:
+  SEC-01,Project Scope & Objectives,HIGH,Must explicitly define both In-Scope and Out-of-Scope boundaries
+  SEC-02,Deliverables Schedule,HIGH,Must include structured table with ID, Deliverable, Format, Target Date, and Owner
+  SEC-03,Acceptance Criteria & Sign-Off,CRITICAL,Must define measurable done metrics per deliverable and a review window (e.g. 5 business days with deemed acceptance)
+  SEC-04,Roles & Responsibilities (RACI),CRITICAL,Must allocate Vendor vs Client responsibilities and name key leads
+  SEC-05,Commercials & Payment Milestones,CRITICAL,Must state TCV, milestone billing triggers, and Net payment terms
+  SEC-06,Assumptions & Dependencies,MEDIUM,Must list client environment/data access dependencies and timeline shift clauses
+  SEC-07,Change Control Process,HIGH,Must require formal written Change Requests (CR) for scope, schedule, or cost changes
+
+risk_triggers[4]{id,pattern,severity,risk_explanation}:
+  RSK-01,full satisfaction / as required by client,CRITICAL,Subjective acceptance or uncapped scope creates unbilled work risk
+  RSK-02,unlimited revisions / ongoing maintenance included,CRITICAL,Uncapped post-launch effort on a fixed-fee contract
+  RSK-03,best efforts,HIGH,Ambiguous delivery obligation incompatible with fixed-fee milestones
+  RSK-04,TBD / to be finalized at kickoff,MEDIUM,Unanchored delivery dates prevent schedule accountability
+4.2 Agent Output Contract (Strict Pydantic / JSON Schema)
+All LLM responses must conform to this exact schema:
+
+JSON
+{
+  "findings": [
+    {
+      "rule_id": "SEC-03",
+      "category": "Completeness | Risk",
+      "severity": "CRITICAL | HIGH | MEDIUM",
+      "section_detected": "Section Name or MISSING",
+      "issue_summary": "Concise description of what is missing or risky",
+      "verbatim_quote": "Exact text copied from the SOW (empty string if section is missing)",
+      "recommended_fix": "Actionable clause or table addition to resolve the finding"
+    }
+  ],
+  "executive_summary": "3-4 sentence commercial risk overview for the Delivery Lead."
+}
+5. Technical Stack & Project Structure
+Language: Python 3.11+
+
+Frontend: streamlit
+
+Document Parsing: docling
+
+LLM Integration: Anthropic SDK (claude-sonnet-4-6 or claude-haiku-4-5) with Structured Outputs / JSON mode
+
+Exports & Storage: pandas + openpyxl (Excel), sqlite3 (History DB), pydantic (Validation)
+
+Plaintext
+sow-reviewer-mvp/
+├── app.py                     # Streamlit UI (Upload, Review Dashboard, Downloads, History tab)
+├── parser.py                  # Docling multi-format parser (.pdf, .docx, .md) & heading splitter
+├── agents.py                  # Completeness, Risk/Vagueness, and Summary LLM calls (TOON in -> JSON out)
+├── engine.py                  # Deterministic Quote Verifier & Score Engine
+├── exporter.py                # Excel (.xlsx) and Markdown (.md) report generators
+├── db.py                      # SQLite review history persistence
+├── knowledge/
+│   └── checklist_v1.toon      # Versioned policy rules in TOON format
+├── sample_docs/               # Generated dry-run files (.pdf, .docx, .md)
+│   ├── company_sow_policy.*
+│   ├── correct_sow_sample.*
+│   └── incorrect_sow_sample.*
+└── requirements.txt
+6. Dry-Run Acceptance Criteria (Definition of Done)
+To validate the MVP, run an automated or manual dry run against two benchmark documents:
+
+Test Case 1 — Gold-Standard SOW (correct_sow_sample.pdf / .md):
+
+Expected Score: 90–100 (Approved / Low Risk).
+
+Expected Findings: 0 CRITICAL and 0 HIGH findings.
+
+Test Case 2 — Flawed SOW (incorrect_sow_sample.pdf / .md):
+
+Expected Score: < 40 (Rejected / High Risk).
+
+Must Catch:
+
+CRITICAL: Missing Acceptance Criteria & Sign-Off section (SEC-03).
+
+CRITICAL: Missing Roles & Responsibilities / RACI (SEC-04).
+
+CRITICAL: Verbatim quote "to the Client's full satisfaction" (RSK-01).
+
+CRITICAL: Verbatim quote "Unlimited revisions to the chatbot prompts and UI are included" (RSK-02).
+
+HIGH: Missing Out-of-Scope boundaries (SEC-01) and Change Control (SEC-07).
+
+MEDIUM: "TBD" timeline dates (RSK-04) and missing Assumptions (SEC-06).
+
+Quote Verification Check: 100% of non-empty verbatim_quote fields must pass deterministic substring verification against the Docling-parsed Markdown.
+
+Prompt to Pass to Claude Alongside This BRD
+"Using the attached BRD, build the complete sow-reviewer-mvp codebase in Python. Include a setup_samples.py script that generates the sample policy, correct SOW, and incorrect SOW in .md, .docx, and .pdf formats, and execute a dry-run test script verifying the scoring engine and quote verifier against both SOWs."
